@@ -37,6 +37,8 @@ class EncryptedNotesManager:
         file_menu.add_command(label="Open Note", command=self.open_note)
         file_menu.add_command(label="Save Note", command=self.save_note)
         file_menu.add_separator()
+        file_menu.add_command(label="Change Password", command=self.change_password)
+        file_menu.add_separator()
         file_menu.add_command(label="Delete Note", command=self.delete_note)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
@@ -243,24 +245,80 @@ class EncryptedNotesManager:
         if not self.current_note["filepath"]:
             messagebox.showerror("Error", "No note is currently open")
             return
-            
+
         if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the note '{self.current_note['title']}'?"):
             try:
                 os.remove(self.current_note["filepath"])
-                
+
                 # Clear current note
                 self.title_entry.delete(0, tk.END)
                 self.content_text.delete("1.0", tk.END)
-                
+
                 self.current_note = {
                     "title": "",
                     "content": "",
                     "filepath": None
                 }
-                
+
                 self.status_var.set("Note deleted")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete note: {str(e)}")
+
+    def change_password(self):
+        """Change the password for the current note"""
+        if not self.current_note["filepath"]:
+            messagebox.showerror("Error", "No note is currently open")
+            return
+
+        # Ask for current password
+        current_password = simpledialog.askstring("Current Password", "Enter current password:", show="*")
+        if not current_password:
+            return
+
+        try:
+            # Read the encrypted note file
+            with open(self.current_note["filepath"], 'r') as f:
+                note_data = json.load(f)
+
+            # Verify current password by decrypting
+            try:
+                decrypted_content = self.decrypt_data(note_data["encrypted_content"], current_password)
+            except ValueError:
+                messagebox.showerror("Error", "Incorrect current password")
+                return
+
+            # Ask for new password
+            new_password = simpledialog.askstring("New Password", "Enter new password:", show="*")
+            if not new_password:
+                return
+
+            # Confirm new password
+            confirm_password = simpledialog.askstring("Confirm New Password", "Confirm new password:", show="*")
+            if not confirm_password:
+                return
+
+            if new_password != confirm_password:
+                messagebox.showerror("Error", "New passwords do not match")
+                return
+
+            # Re-encrypt content with new password
+            encrypted_content = self.encrypt_data(decrypted_content, new_password)
+
+            # Update note data
+            note_data["encrypted_content"] = encrypted_content
+
+            # Save back to file
+            with open(self.current_note["filepath"], 'w') as f:
+                json.dump(note_data, f, indent=2)
+
+            # Update current note content (keep it decrypted in memory)
+            self.current_note["content"] = decrypted_content
+
+            messagebox.showinfo("Success", "Password changed successfully!")
+            self.status_var.set(f"Password changed for: {self.current_note['title']}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to change password: {str(e)}")
 
 
 if __name__ == "__main__":
